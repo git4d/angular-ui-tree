@@ -58,6 +58,7 @@
         $scope.$type = 'uiTreeNode';
         $scope.$$allowNodeDrop = false;
         $scope.collapsed = false;
+        $scope.expandOnHover = false;
 
         $scope.init = function (controllersArr) {
           var treeNodesCtrl = controllersArr[0];
@@ -444,6 +445,12 @@
             callbacks.beforeDrag = function (sourceNodeScope) {
               return true;
             };
+            
+            callbacks.expandTimeoutStart = function() {};
+
+            callbacks.expandTimeoutCancel = function() {};
+
+            callbacks.expandTimeoutEnd = function() {};
 
             callbacks.removed = function (node) {
 
@@ -597,6 +604,10 @@
               if ((typeof val) == 'boolean') {
                 scope.collapsed = val;
               }
+            });
+            
+            scope.$watch(attrs.expandOnHover, function (val) {
+              scope.expandOnHover = val;
             });
 
             scope.$watch('collapsed', function (val) {
@@ -968,6 +979,23 @@
                       dragInfo.moveTo(targetNode.$nodesScope, targetNode.$nodesScope.childNodes(), 0);
                     }
                   } else if (targetNode.dragEnabled()) { // drag enabled
+                    // check if expandOnHover property is defined
+                    // immediate
+                    if (scope.expandOnHover === true || scope.expandOnHover === 0) {
+                      targetNode.collapsed = false;
+                    }
+                    // delayed
+                    else if (angular.isNumber(scope.expandOnHover) && scope.expandOnHover > 0) {
+                      if (angular.isUndefined(scope.expandTimeoutOn)) {
+                        scope.expandTimeoutOn = targetNode.$id;
+                        scope.$callbacks.expandTimeoutStart();
+                        scope.expandTimeout = $timeout(function() {
+                          scope.$callbacks.expandTimeoutEnd();
+                          targetNode.collapsed = false;
+                        }, scope.expandOnHover);
+                      }
+                    }
+                    
                     targetElm = targetNode.$element; // Get the element of ui-tree-node
                     targetOffset = UiTreeHelper.offset(targetElm);
                     targetBefore = targetNode.horizontal ? eventObj.pageX < (targetOffset.left + UiTreeHelper.width(targetElm) / 2)
@@ -1000,6 +1028,8 @@
               var dragEventArgs = dragInfo.eventArgs(elements, pos);
               e.preventDefault();
               unbindDragMoveEvents();
+              // cancel possible delayed expandOnHover action
+              $timeout.cancel(scope.expandTimeout);
 
               scope.$treeScope.$apply(function () {
                 $q.when(scope.$treeScope.$callbacks.beforeDrop(dragEventArgs))
